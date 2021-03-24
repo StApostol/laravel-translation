@@ -9,10 +9,24 @@ on:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
+
+    strategy:
+      fail-fast: true
+      matrix:
+        php: [ '7.4']
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ matrix.php }}
+        extensions: dom, curl, sqlite, pdo_sqlite
+        tools: composer:v2
+        coverage: none
 
     - name: Validate composer.json and composer.lock
       run: composer validate --strict
@@ -27,10 +41,15 @@ jobs:
           ${{ runner.os }}-php-
 
     - name: Install dependencies
-      run: composer install --prefer-dist --no-progress --no-suggest
+      uses: nick-invision/retry@v1
+      with:
+        timeout_minutes: 5
+        max_attempts: 5
+        command: composer update --${{ matrix.stability }} --prefer-dist --no-interaction --no-progress ${{ matrix.flags }}
 
     # Add a test script to composer.json, for instance: "test": "vendor/bin/phpunit"
     # Docs: https://getcomposer.org/doc/articles/scripts.md
 
     - name: Run test suite
+      continue-on-error: ${{ matrix.php > 8 }}
       run: composer run-script test
