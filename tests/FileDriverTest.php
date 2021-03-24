@@ -2,6 +2,9 @@
 
 namespace JoeDixon\Translation\Tests;
 
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\Foundation\Application;
+use JoeDixon\Translation\Drivers\File;
 use JoeDixon\Translation\Drivers\Translation;
 use JoeDixon\Translation\Exceptions\LanguageExistsException;
 use JoeDixon\Translation\TranslationBindingsServiceProvider;
@@ -10,19 +13,35 @@ use Orchestra\Testbench\TestCase;
 
 class FileDriverTest extends TestCase
 {
+    /** @var File */
     private $translation;
 
-    /**
-     * Setup the test environment.
-     */
+    /** @var Filesystem */
+    private $filesystem;
+
     protected function setUp(): void
     {
         parent::setUp();
+
         app()['path.lang'] = __DIR__.'/fixtures/lang';
+
         $this->translation = app()->make(Translation::class);
+        $this->filesystem = app()->make(Filesystem::class);
     }
 
-    protected function getPackageProviders($app)
+    protected function tearDown(): void
+    {
+        $this->restoreFixtureFolder();
+
+        unset(
+            $this->translation,
+            $this->filesystem
+        );
+
+        parent::tearDown();
+    }
+
+    protected function getPackageProviders(Application $app): array
     {
         return [
             TranslationServiceProvider::class,
@@ -30,129 +49,155 @@ class FileDriverTest extends TestCase
         ];
     }
 
-    protected function getEnvironmentSetUp($app)
+    protected function getEnvironmentSetUp($app): void
     {
         $app['config']->set('translation.driver', 'file');
     }
 
     /** @test */
-    public function it_returns_all_languages()
+    public function it_returns_all_languages(): void
     {
         $languages = $this->translation->allLanguages();
 
-        $this->assertEquals($languages->count(), 2);
-        $this->assertEquals($languages->toArray(), ['en' => 'en', 'es' => 'es']);
+        $this->assertCount(2, $languages);
+        $this->assertEquals(['en' => 'en', 'es' => 'es'], $languages->toArray());
     }
 
     /** @test */
-    public function it_returns_all_translations()
+    public function it_returns_all_translations(): void
     {
         $translations = $this->translation->allTranslations();
 
-        $this->assertEquals($translations->count(), 2);
-        $this->assertArraySubset(['en' => ['single' => ['single' => ['Hello' => 'Hello', "What's up" => "What's up!"]], 'group' => ['test' => ['hello' => 'Hello', 'whats_up' => "What's up!"]]]], $translations->toArray());
+        $this->assertCount(2, $translations);
+
         $this->assertArrayHasKey('en', $translations->toArray());
         $this->assertArrayHasKey('es', $translations->toArray());
+
+        $this->assertEquals([
+            'en' => [
+                'single' => [
+                    'single' => [
+                        'Hello' => 'Hello',
+                        "What's up" => "What's up!",
+                    ],
+                ],
+                'group' => [
+                    'test' => [
+                        'hello' => 'Hello',
+                        'whats_up' => "What's up!",
+                    ],
+                ],
+            ],
+            'es' => [
+                'single' => [
+                ],
+                'group' => [
+                ],
+            ],
+        ], $translations->toArray());
     }
 
     /** @test */
-    public function it_returns_all_translations_for_a_given_language()
+    public function it_returns_all_translations_for_a_given_language(): void
     {
         $translations = $this->translation->allTranslationsFor('en');
-        $this->assertEquals($translations->count(), 2);
-        $this->assertEquals(['single' => ['single' => ['Hello' => 'Hello', "What's up" => "What's up!"]], 'group' => ['test' => ['hello' => 'Hello', 'whats_up' => "What's up!"]]], $translations->toArray());
+
+        $this->assertCount(2, $translations);
+
         $this->assertArrayHasKey('single', $translations->toArray());
         $this->assertArrayHasKey('group', $translations->toArray());
+
+        $this->assertEquals([
+            'single' => [
+                'single' => [
+                    'Hello' => 'Hello',
+                    "What's up" => "What's up!",
+                ],
+            ],
+            'group' => [
+                'test' => [
+                    'hello' => 'Hello',
+                    'whats_up' => "What's up!",
+                ],
+            ],
+        ], $translations->toArray());
     }
 
     /** @test */
-    public function it_throws_an_exception_if_a_language_exists()
+    public function it_throws_an_exception_if_a_language_exists(): void
     {
         $this->expectException(LanguageExistsException::class);
+
         $this->translation->addLanguage('en');
     }
 
     /** @test */
-    public function it_can_add_a_new_language()
+    public function it_can_add_a_new_language(): void
     {
         $this->translation->addLanguage('fr');
 
         $this->assertTrue(file_exists(__DIR__.'/fixtures/lang/fr.json'));
         $this->assertTrue(file_exists(__DIR__.'/fixtures/lang/fr'));
 
-        rmdir(__DIR__.'/fixtures/lang/fr');
         unlink(__DIR__.'/fixtures/lang/fr.json');
+        rmdir(__DIR__.'/fixtures/lang/fr');
     }
 
     /** @test */
-    public function it_can_add_a_new_translation_to_a_new_group()
+    public function it_can_add_a_new_translation_to_a_new_group(): void
     {
         $this->translation->addGroupTranslation('es', 'test', 'hello', 'Hola!');
 
         $translations = $this->translation->allTranslationsFor('es');
 
-        $this->assertArraySubset(['group' => ['test' => ['hello' => 'Hola!']]], $translations->toArray());
-
-        unlink(__DIR__.'/fixtures/lang/es/test.php');
+        $this->assertEquals(['group' => ['test' => ['hello' => 'Hola!']], 'single' => []], $translations->toArray());
     }
 
     /** @test */
-    public function it_can_add_a_new_translation_to_an_existing_translation_group()
+    public function it_can_add_a_new_translation_to_an_existing_translation_group(): void
     {
         $this->translation->addGroupTranslation('en', 'test', 'test', 'Testing');
 
         $translations = $this->translation->allTranslationsFor('en');
 
-        $this->assertArraySubset(['group' => ['test' => ['hello' => 'Hello', 'whats_up' => 'What\'s up!', 'test' => 'Testing']]], $translations->toArray());
-
-        file_put_contents(
-            app()['path.lang'].'/en/test.php',
-            "<?php\n\nreturn ".var_export(['hello' => 'Hello', 'whats_up' => 'What\'s up!'], true).';'.\PHP_EOL
-        );
+        $this->assertEquals(['group' => ['test' => ['hello' => 'Hello', 'whats_up' => 'What\'s up!', 'test' => 'Testing']], 'single' => ['single' => ['Hello' => 'Hello', 'What\'s up' => 'What\'s up!']]], $translations->toArray());
     }
 
     /** @test */
-    public function it_can_add_a_new_single_translation()
+    public function it_can_add_a_new_single_translation(): void
     {
         $this->translation->addSingleTranslation('es', 'single', 'Hello', 'Hola!');
 
         $translations = $this->translation->allTranslationsFor('es');
 
-        $this->assertArraySubset(['single' => ['single' => ['Hello' => 'Hola!']]], $translations->toArray());
-
-        unlink(__DIR__.'/fixtures/lang/es.json');
+        $this->assertEquals(['single' => ['single' => ['Hello' => 'Hola!']], 'group' => []], $translations->toArray());
     }
 
     /** @test */
-    public function it_can_add_a_new_single_translation_to_an_existing_language()
+    public function it_can_add_a_new_single_translation_to_an_existing_language(): void
     {
         $this->translation->addSingleTranslation('en', 'single', 'Test', 'Testing');
 
         $translations = $this->translation->allTranslationsFor('en');
 
-        $this->assertArraySubset(['single' => ['single' => ['Hello' => 'Hello', 'What\'s up' => 'What\'s up!', 'Test' => 'Testing']]], $translations->toArray());
-
-        file_put_contents(
-            app()['path.lang'].'/en.json',
-            json_encode((object) ['Hello' => 'Hello', 'What\'s up' => 'What\'s up!'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
-        );
+        $this->assertEquals(['single' => ['single' => ['Hello' => 'Hello', 'What\'s up' => 'What\'s up!', 'Test' => 'Testing']], 'group' => ['test' => ['hello' => 'Hello', 'whats_up' => 'What\'s up!',]]], $translations->toArray());
     }
 
     /** @test */
-    public function it_can_get_a_collection_of_group_names_for_a_given_language()
+    public function it_can_get_a_collection_of_group_names_for_a_given_language(): void
     {
         $groups = $this->translation->getGroupsFor('en');
 
-        $this->assertEquals($groups->toArray(), ['test']);
+        $this->assertEquals(['test'], $groups->toArray());
     }
 
     /** @test */
-    public function it_can_merge_a_language_with_the_base_language()
+    public function it_can_merge_a_language_with_the_base_language(): void
     {
         $this->translation->addGroupTranslation('es', 'test', 'hello', 'Hola!');
         $translations = $this->translation->getSourceLanguageTranslationsWith('es');
 
-        $this->assertEquals($translations->toArray(), [
+        $this->assertEquals([
             'group' => [
                 'test' => [
                     'hello' => ['en' => 'Hello', 'es' => 'Hola!'],
@@ -171,72 +216,71 @@ class FileDriverTest extends TestCase
                     ],
                 ],
             ],
-        ]);
+        ], $translations->toArray());
 
         unlink(__DIR__.'/fixtures/lang/es/test.php');
     }
 
     /** @test */
-    public function it_can_add_a_vendor_namespaced_translations()
+    public function it_can_add_a_vendor_namespaced_translations(): void
     {
         $this->translation->addGroupTranslation('es', 'translation_test::test', 'hello', 'Hola!');
+        $this->translation->addGroupTranslation('es', 'translation_test::test', 'nested.hello', 'Hola!');
 
-        $this->assertEquals($this->translation->allTranslationsFor('es')->toArray(), [
+        $this->assertEquals([
             'group' => [
                 'translation_test::test' => [
                     'hello' => 'Hola!',
+                    'nested' => [
+                        'hello' => 'Hola!',
+                    ],
                 ],
             ],
             'single' => [],
-        ]);
-
-        \File::deleteDirectory(__DIR__.'/fixtures/lang/vendor');
+        ], $this->translation->allTranslationsFor('es')->toArray());
     }
 
     /** @test */
-    public function it_can_add_a_nested_translation()
+    public function it_can_add_a_nested_translation(): void
     {
         $this->translation->addGroupTranslation('en', 'test', 'test.nested', 'Nested!');
 
-        $this->assertEquals($this->translation->getGroupTranslationsFor('en')->toArray(), [
+        $this->assertEquals([
             'test' => [
                 'hello' => 'Hello',
-                'test.nested' => 'Nested!',
+                'test' => [
+                    'nested' => 'Nested!',
+                ],
                 'whats_up' => 'What\'s up!',
             ],
-        ]);
-
-        file_put_contents(
-            app()['path.lang'].'/en/test.php',
-            "<?php\n\nreturn ".var_export(['hello' => 'Hello', 'whats_up' => 'What\'s up!'], true).';'.\PHP_EOL
-        );
+        ], $this->translation->getGroupTranslationsFor('en')->toArray());
     }
 
     /** @test */
-    public function it_can_add_nested_vendor_namespaced_translations()
+    public function it_can_add_nested_vendor_namespaced_translations(): void
     {
         $this->translation->addGroupTranslation('es', 'translation_test::test', 'nested.hello', 'Hola!');
 
-        $this->assertEquals($this->translation->allTranslationsFor('es')->toArray(), [
+        $this->assertEquals([
             'group' => [
                 'translation_test::test' => [
-                    'nested.hello' => 'Hola!',
+                    'nested' => [
+                        'hello' => 'Hola!',
+                    ],
                 ],
             ],
             'single' => [],
-        ]);
-
-        \File::deleteDirectory(__DIR__.'/fixtures/lang/vendor');
+        ], $this->translation->allTranslationsFor('es')->toArray());
     }
 
     /** @test */
-    public function it_can_merge_a_namespaced_language_with_the_base_language()
+    public function it_can_merge_a_namespaced_language_with_the_base_language(): void
     {
         $this->translation->addGroupTranslation('en', 'translation_test::test', 'hello', 'Hello');
         $this->translation->addGroupTranslation('es', 'translation_test::test', 'hello', 'Hola!');
         $translations = $this->translation->getSourceLanguageTranslationsWith('es');
 
-        $this->assertEquals($translations->toArray(), [
+        $this->assertEquals([
             'group' => [
                 'test' => [
                     'hello' => ['en' => 'Hello', 'es' => ''],
@@ -258,27 +302,25 @@ class FileDriverTest extends TestCase
                     ],
                 ],
             ],
-        ]);
-
-        \File::deleteDirectory(__DIR__.'/fixtures/lang/vendor');
+        ], $translations->toArray());
     }
 
     /** @test */
-    public function a_list_of_languages_can_be_viewed()
+    public function a_list_of_languages_can_be_viewed(): void
     {
         $this->get(config('translation.ui_url'))
             ->assertSee('en');
     }
 
     /** @test */
-    public function the_language_creation_page_can_be_viewed()
+    public function the_language_creation_page_can_be_viewed(): void
     {
         $this->get(config('translation.ui_url').'/create')
             ->assertSee('Add a new language');
     }
 
     /** @test */
-    public function a_language_can_be_added()
+    public function a_language_can_be_added(): void
     {
         $this->post(config('translation.ui_url'), ['locale' => 'de'])
             ->assertRedirect();
@@ -291,7 +333,7 @@ class FileDriverTest extends TestCase
     }
 
     /** @test */
-    public function a_list_of_translations_can_be_viewed()
+    public function a_list_of_translations_can_be_viewed(): void
     {
         $this->get(config('translation.ui_url').'/en/translations')
             ->assertSee('hello')
@@ -299,36 +341,54 @@ class FileDriverTest extends TestCase
     }
 
     /** @test */
-    public function the_translation_creation_page_can_be_viewed()
+    public function the_translation_creation_page_can_be_viewed(): void
     {
         $this->get(config('translation.ui_url').'/'.config('app.locale').'/translations/create')
             ->assertSee('Add a translation');
     }
 
     /** @test */
-    public function a_new_translation_can_be_added()
+    public function a_new_translation_can_be_added(): void
     {
         $this->post(config('translation.ui_url').'/en/translations', ['key' => 'joe', 'value' => 'is cool'])
             ->assertRedirect();
         $translations = $this->translation->getSingleTranslationsFor('en');
 
-        $this->assertArraySubset(['single' => ['Hello' => 'Hello', 'What\'s up' => 'What\'s up!', 'joe' => 'is cool']], $translations->toArray());
-
-        file_put_contents(
-            app()['path.lang'].'/en.json',
-            json_encode((object) ['Hello' => 'Hello', 'What\'s up' => 'What\'s up!'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
-        );
+        $this->assertEquals([
+            'single' => [
+                'Hello' => 'Hello',
+                'What\'s up' => 'What\'s up!',
+                'joe' => 'is cool',
+            ],
+        ], $translations->toArray());
     }
 
     /** @test */
-    public function a_translation_can_be_updated()
+    public function a_translation_can_be_updated(): void
     {
         $this->post(config('translation.ui_url').'/en', ['group' => 'test', 'key' => 'hello', 'value' => 'Hello there!'])
             ->assertStatus(200)
             ->assertSee(json_encode(['success' => true]));
         $translations = $this->translation->getGroupTranslationsFor('en');
 
-        $this->assertArraySubset(['test' => ['hello' => 'Hello there!', 'whats_up' => 'What\'s up!']], $translations->toArray());
+        $this->assertEquals([
+            'test' => [
+                'hello' => 'Hello there!',
+                'whats_up' => 'What\'s up!',
+            ],
+        ], $translations->toArray());
+    }
+
+    private function restoreFixtureFolder(): void
+    {
+        $this->filesystem->delete(app()['path.lang'].'/es/test.php');
+        $this->filesystem->delete(app()['path.lang'].'/es.json');
+        $this->filesystem->deleteDirectory(app()['path.lang'].'/vendor');
+
+        file_put_contents(
+            app()['path.lang'].'/en.json',
+            json_encode((object) ['Hello' => 'Hello', 'What\'s up' => 'What\'s up!'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
+        );
 
         file_put_contents(
             app()['path.lang'].'/en/test.php',

@@ -2,127 +2,82 @@
 
 namespace JoeDixon\Translation\Drivers;
 
+use Illuminate\Support\Collection;
+
 interface DriverInterface
 {
     /**
      * Get all languages from the application.
-     *
-     * @return Collection
      */
-    public function allLanguages();
+    public function allLanguages(): Collection;
 
     /**
      * Get all group translations from the application.
-     *
-     * @return array
      */
-    public function allGroup($language);
+    public function allGroup(string $language): Collection;
 
     /**
      * Get all the translations from the application.
-     *
-     * @return Collection
      */
-    public function allTranslations();
+    public function allTranslations(): Collection;
 
     /**
      * Get all translations for a particular language.
-     *
-     * @param string $language
-     * @return Collection
      */
-    public function allTranslationsFor($language);
+    public function allTranslationsFor(string $language): Collection;
 
     /**
      * Add a new language to the application.
-     *
-     * @param string $language
-     * @return void
      */
-    public function addLanguage($language, $name = null);
+    public function addLanguage(string $language, ?string $name = null): void;
 
     /**
      * Add a new group type translation.
-     *
-     * @param string $language
-     * @param string $key
-     * @param string $value
-     * @return void
      */
-    public function addGroupTranslation($language, $group, $key, $value = '');
+    public function addGroupTranslation(string $language, string $group, string $key, string $value = ''): void;
 
     /**
      * Add a new single type translation.
-     *
-     * @param string $language
-     * @param string $key
-     * @param string $value
-     * @return void
      */
-    public function addSingleTranslation($language, $vendor, $key, $value = '');
+    public function addSingleTranslation(string $language, string $vendor, string $key, string $value = ''): void;
 
     /**
      * Get all of the single translations for a given language.
-     *
-     * @param string $language
-     * @return Collection
      */
-    public function getSingleTranslationsFor($language);
+    public function getSingleTranslationsFor(string $language): Collection;
 
     /**
      * Get all of the group translations for a given language.
-     *
-     * @param string $language
-     * @return Collection
      */
-    public function getGroupTranslationsFor($language);
+    public function getGroupTranslationsFor(string $language): Collection;
 
     /**
      * Determine whether or not a language exists.
-     *
-     * @param string $language
-     * @return bool
      */
-    public function languageExists($language);
+    public function languageExists(string $language): bool;
 
     /**
      * Find all of the translations in the app without translation for a given language.
-     *
-     * @param string $language
-     * @return array
      */
-    public function findMissingTranslations($language);
+    public function findMissingTranslations(string $language): array;
 
     /**
      * Save all of the translations in the app without translation for a given language.
-     *
-     * @param string $language
-     * @return void
      */
-    public function saveMissingTranslations($language = false);
+    public function saveMissingTranslations(?string $language = null): void;
 
     /**
      * Get a collection of group names for a given language.
-     *
-     * @param string $language
-     * @return Collection
      */
-    public function getGroupsFor($language);
+    public function getGroupsFor(string $language): Collection;
 
     /**
      * Get all translations for a given language merged with the source language.
-     *
-     * @param string $language
-     * @return Collection
      */
-    public function getSourceLanguageTranslationsWith($language);
+    public function getSourceLanguageTranslationsWith(string $language): Collection;
 
     /**
      * Filter all keys and translations for a given language and string.
-     *
-     * @param string $language
-     * @param string $filter
-     * @return Collection
      */
-    public function filterTranslationsFor($language, $filter);
+    public function filterTranslationsFor(string $language, ?string $filter = null): Collection;
 }

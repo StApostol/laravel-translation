@@ -7,18 +7,17 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use JoeDixon\Translation\Exceptions\LanguageExistsException;
+use JoeDixon\Translation\Scanner;
 
 class File extends Translation implements DriverInterface
 {
-    private $disk;
+    protected string $sourceLanguage;
+    protected Scanner $scanner;
 
-    private $languageFilesPath;
+    private Filesystem $disk;
+    private string $languageFilesPath;
 
-    protected $sourceLanguage;
-
-    protected $scanner;
-
-    public function __construct(Filesystem $disk, $languageFilesPath, $sourceLanguage, $scanner)
+    public function __construct(Filesystem $disk, string $languageFilesPath, string $sourceLanguage, Scanner $scanner)
     {
         $this->disk = $disk;
         $this->languageFilesPath = $languageFilesPath;
@@ -26,12 +25,7 @@ class File extends Translation implements DriverInterface
         $this->scanner = $scanner;
     }
 
-    /**
-     * Get all languages from the application.
-     *
-     * @return Collection
-     */
-    public function allLanguages()
+    public function allLanguages(): Collection
     {
         // As per the docs, there should be a subdirectory within the
         // languages path so we can return these directory names as a collection
@@ -47,17 +41,12 @@ class File extends Translation implements DriverInterface
         });
     }
 
-    /**
-     * Get all group translations from the application.
-     *
-     * @return array
-     */
-    public function allGroup($language)
+    public function allGroup(string $language): Collection
     {
         $groupPath = "{$this->languageFilesPath}".DIRECTORY_SEPARATOR."{$language}";
 
-        if (! $this->disk->exists($groupPath)) {
-            return [];
+        if (!$this->disk->exists($groupPath)) {
+            return collect();
         }
 
         $groups = Collection::make($this->disk->allFiles($groupPath));
@@ -67,25 +56,12 @@ class File extends Translation implements DriverInterface
         });
     }
 
-    /**
-     * Get all the translations from the application.
-     *
-     * @return Collection
-     */
-    public function allTranslations()
+    public function allTranslations(): Collection
     {
-        return $this->allLanguages()->mapWithKeys(function ($language) {
-            return [$language => $this->allTranslationsFor($language)];
-        });
+        return $this->allLanguages()->mapWithKeys(fn ($language) => [$language => $this->allTranslationsFor($language)]);
     }
 
-    /**
-     * Get all translations for a particular language.
-     *
-     * @param string $language
-     * @return Collection
-     */
-    public function allTranslationsFor($language)
+    public function allTranslationsFor(string $language): Collection
     {
         return Collection::make([
             'group' => $this->getGroupTranslationsFor($language),
@@ -93,42 +69,29 @@ class File extends Translation implements DriverInterface
         ]);
     }
 
-    /**
-     * Add a new language to the application.
-     *
-     * @param string $language
-     * @return void
-     */
-    public function addLanguage($language, $name = null)
+    public function addLanguage(string $language, ?string $name = null): void
     {
         if ($this->languageExists($language)) {
             throw new LanguageExistsException(__('translation::errors.language_exists', ['language' => $language]));
         }
 
         $this->disk->makeDirectory("{$this->languageFilesPath}".DIRECTORY_SEPARATOR."$language");
-        if (! $this->disk->exists("{$this->languageFilesPath}".DIRECTORY_SEPARATOR."{$language}.json")) {
+
+        if (!$this->disk->exists("{$this->languageFilesPath}".DIRECTORY_SEPARATOR."{$language}.json")) {
             $this->saveSingleTranslations($language, collect(['single' => collect()]));
         }
     }
 
-    /**
-     * Add a new group type translation.
-     *
-     * @param string $language
-     * @param string $key
-     * @param string $value
-     * @return void
-     */
-    public function addGroupTranslation($language, $group, $key, $value = '')
+    public function addGroupTranslation(string $language, string $group, string $key, string $value = ''): void
     {
-        if (! $this->languageExists($language)) {
+        if (!$this->languageExists($language)) {
             $this->addLanguage($language);
         }
 
         $translations = $this->getGroupTranslationsFor($language);
 
         // does the group exist? If not, create it.
-        if (! $translations->keys()->contains($group)) {
+        if (!$translations->keys()->contains($group)) {
             $translations->put($group, collect());
         }
 
@@ -139,17 +102,9 @@ class File extends Translation implements DriverInterface
         $this->saveGroupTranslations($language, $group, $translations->get($group));
     }
 
-    /**
-     * Add a new single type translation.
-     *
-     * @param string $language
-     * @param string $key
-     * @param string $value
-     * @return void
-     */
-    public function addSingleTranslation($language, $vendor, $key, $value = '')
+    public function addSingleTranslation(string $language, string $vendor, string $key, string $value = ''): void
     {
-        if (! $this->languageExists($language)) {
+        if (!$this->languageExists($language)) {
             $this->addLanguage($language);
         }
 
@@ -160,13 +115,7 @@ class File extends Translation implements DriverInterface
         $this->saveSingleTranslations($language, $translations);
     }
 
-    /**
-     * Get all of the single translations for a given language.
-     *
-     * @param string $language
-     * @return Collection
-     */
-    public function getSingleTranslationsFor($language)
+    public function getSingleTranslationsFor(string $language): Collection
     {
         $files = new Collection($this->disk->allFiles($this->languageFilesPath));
 
@@ -183,13 +132,7 @@ class File extends Translation implements DriverInterface
         });
     }
 
-    /**
-     * Get all of the group translations for a given language.
-     *
-     * @param string $language
-     * @return Collection
-     */
-    public function getGroupTranslationsFor($language)
+    public function getGroupTranslationsFor(string $language): Collection
     {
         return $this->getGroupFilesFor($language)->mapWithKeys(function ($group) {
             // here we check if the path contains 'vendor' as these will be the
@@ -197,10 +140,10 @@ class File extends Translation implements DriverInterface
             if (Str::contains($group->getPathname(), 'vendor')) {
                 $vendor = Str::before(Str::after($group->getPathname(), 'vendor'.DIRECTORY_SEPARATOR), DIRECTORY_SEPARATOR);
 
-                return ["{$vendor}::{$group->getBasename('.php')}" => new Collection(Arr::dot($this->disk->getRequire($group->getPathname())))];
+                return ["{$vendor}::{$group->getBasename('.php')}" => new Collection($this->disk->getRequire($group->getPathname()))];
             }
 
-            return [$group->getBasename('.php') => new Collection(Arr::dot($this->disk->getRequire($group->getPathname())))];
+            return [$group->getBasename('.php') => new Collection($this->disk->getRequire($group->getPathname()))];
         });
     }
 
@@ -224,13 +167,7 @@ class File extends Translation implements DriverInterface
         return $translations;
     }
 
-    /**
-     * Determine whether or not a language exists.
-     *
-     * @param string $language
-     * @return bool
-     */
-    public function languageExists($language)
+    public function languageExists(string $language): bool
     {
         return $this->allLanguages()->contains($language);
     }
@@ -281,21 +218,14 @@ class File extends Translation implements DriverInterface
         [$namespace, $group] = explode('::', $group);
         $directory = "{$this->languageFilesPath}".DIRECTORY_SEPARATOR.'vendor'.DIRECTORY_SEPARATOR."{$namespace}".DIRECTORY_SEPARATOR."{$language}";
 
-        if (! $this->disk->exists($directory)) {
+        if (!$this->disk->exists($directory)) {
             $this->disk->makeDirectory($directory, 0755, true);
         }
 
         $this->disk->put("$directory".DIRECTORY_SEPARATOR."{$group}.php", "<?php\n\nreturn ".var_export($translations, true).';'.\PHP_EOL);
     }
 
-    /**
-     * Save single type language translations.
-     *
-     * @param string $language
-     * @param array $translations
-     * @return void
-     */
-    private function saveSingleTranslations($language, $translations)
+    private function saveSingleTranslations(string $language, iterable $translations): void
     {
         foreach ($translations as $group => $translation) {
             $vendor = Str::before($group, '::single');
@@ -323,13 +253,7 @@ class File extends Translation implements DriverInterface
         return $groups;
     }
 
-    /**
-     * Get a collection of group names for a given language.
-     *
-     * @param string $language
-     * @return Collection
-     */
-    public function getGroupsFor($language)
+    public function getGroupsFor(string $language): Collection
     {
         return $this->getGroupFilesFor($language)->map(function ($file) {
             if (Str::contains($file->getPathname(), 'vendor')) {
@@ -350,14 +274,14 @@ class File extends Translation implements DriverInterface
      */
     public function getVendorGroupFilesFor($language)
     {
-        if (! $this->disk->exists("{$this->languageFilesPath}".DIRECTORY_SEPARATOR.'vendor')) {
+        if (!$this->disk->exists("{$this->languageFilesPath}".DIRECTORY_SEPARATOR.'vendor')) {
             return;
         }
 
         $vendorGroups = [];
         foreach ($this->disk->directories("{$this->languageFilesPath}".DIRECTORY_SEPARATOR.'vendor') as $vendor) {
             $vendor = Arr::last(explode(DIRECTORY_SEPARATOR, $vendor));
-            if (! $this->disk->exists("{$this->languageFilesPath}".DIRECTORY_SEPARATOR.'vendor'.DIRECTORY_SEPARATOR."{$vendor}".DIRECTORY_SEPARATOR."{$language}")) {
+            if (!$this->disk->exists("{$this->languageFilesPath}".DIRECTORY_SEPARATOR.'vendor'.DIRECTORY_SEPARATOR."{$vendor}".DIRECTORY_SEPARATOR."{$language}")) {
                 array_push($vendorGroups, []);
             } else {
                 array_push($vendorGroups, $this->disk->allFiles("{$this->languageFilesPath}".DIRECTORY_SEPARATOR.'vendor'.DIRECTORY_SEPARATOR."{$vendor}".DIRECTORY_SEPARATOR."{$language}"));

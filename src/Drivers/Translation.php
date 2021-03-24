@@ -2,18 +2,13 @@
 
 namespace JoeDixon\Translation\Drivers;
 
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 abstract class Translation
 {
-    /**
-     * Find all of the translations in the app without translation for a given language.
-     *
-     * @param string $language
-     * @return array
-     */
-    public function findMissingTranslations($language)
+    public function findMissingTranslations(string $language): array
     {
         return array_diff_assoc_recursive(
             $this->scanner->findTranslations(),
@@ -21,13 +16,7 @@ abstract class Translation
         );
     }
 
-    /**
-     * Save all of the translations in the app without translation for a given language.
-     *
-     * @param string $language
-     * @return void
-     */
-    public function saveMissingTranslations($language = false)
+    public function saveMissingTranslations(?string $language = null): void
     {
         $languages = $language ? [$language => $language] : $this->allLanguages();
 
@@ -48,24 +37,19 @@ abstract class Translation
         }
     }
 
-    /**
-     * Get all translations for a given language merged with the source language.
-     *
-     * @param string $language
-     * @return Collection
-     */
-    public function getSourceLanguageTranslationsWith($language)
+    public function getSourceLanguageTranslationsWith(string $language): Collection
     {
         $sourceTranslations = $this->allTranslationsFor($this->sourceLanguage);
         $languageTranslations = $this->allTranslationsFor($language);
 
         return $sourceTranslations->map(function ($groups, $type) use ($language, $languageTranslations) {
             return $groups->map(function ($translations, $group) use ($type, $language, $languageTranslations) {
-                $translations = $translations->toArray();
+                $translations = $translations instanceof Collection ? $translations->toArray() : $translations;
+
                 array_walk($translations, function (&$value, &$key) use ($type, $group, $language, $languageTranslations) {
                     $value = [
                         $this->sourceLanguage => $value,
-                        $language => $languageTranslations->get($type, collect())->get($group, collect())->get($key),
+                        $language => Arr::get($languageTranslations->get($type, collect())->get($group, collect()), $key),
                     ];
                 });
 
@@ -74,16 +58,10 @@ abstract class Translation
         });
     }
 
-    /**
-     * Filter all keys and translations for a given language and string.
-     *
-     * @param string $language
-     * @param string $filter
-     * @return Collection
-     */
-    public function filterTranslationsFor($language, $filter)
+    public function filterTranslationsFor(string $language, ?string $filter = null): Collection
     {
         $allTranslations = $this->getSourceLanguageTranslationsWith(($language));
+
         if (! $filter) {
             return $allTranslations;
         }

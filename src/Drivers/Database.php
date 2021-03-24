@@ -2,41 +2,33 @@
 
 namespace JoeDixon\Translation\Drivers;
 
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use JoeDixon\Translation\Exceptions\LanguageExistsException;
 use JoeDixon\Translation\Language;
+use JoeDixon\Translation\Scanner;
 use JoeDixon\Translation\Translation as TranslationModel;
 
 class Database extends Translation implements DriverInterface
 {
-    protected $sourceLanguage;
+    protected string $sourceLanguage;
 
-    protected $scanner;
+    protected Scanner $scanner;
 
-    public function __construct($sourceLanguage, $scanner)
+    public function __construct(string $sourceLanguage, Scanner$scanner)
     {
         $this->sourceLanguage = $sourceLanguage;
         $this->scanner = $scanner;
     }
 
-    /**
-     * Get all languages from the application.
-     *
-     * @return Collection
-     */
-    public function allLanguages()
+    public function allLanguages(): Collection
     {
         return Language::all()->mapWithKeys(function ($language) {
             return [$language->language => $language->name ?: $language->language];
         });
     }
 
-    /**
-     * Get all group translations from the application.
-     *
-     * @return array
-     */
-    public function allGroup($language)
+    public function allGroup(string $language): Collection
     {
         $groups = TranslationModel::getGroupsForLanguage($language);
 
@@ -45,25 +37,14 @@ class Database extends Translation implements DriverInterface
         });
     }
 
-    /**
-     * Get all the translations from the application.
-     *
-     * @return Collection
-     */
-    public function allTranslations()
+    public function allTranslations(): Collection
     {
         return $this->allLanguages()->mapWithKeys(function ($name, $language) {
             return [$language => $this->allTranslationsFor($language)];
         });
     }
 
-    /**
-     * Get all translations for a particular language.
-     *
-     * @param string $language
-     * @return Collection
-     */
-    public function allTranslationsFor($language)
+    public function allTranslationsFor(string $language): Collection
     {
         return Collection::make([
             'group' => $this->getGroupTranslationsFor($language),
@@ -71,13 +52,7 @@ class Database extends Translation implements DriverInterface
         ]);
     }
 
-    /**
-     * Add a new language to the application.
-     *
-     * @param string $language
-     * @return void
-     */
-    public function addLanguage($language, $name = null)
+    public function addLanguage(string $language, ?string $name = null): void
     {
         if ($this->languageExists($language)) {
             throw new LanguageExistsException(__('translation::errors.language_exists', ['language' => $language]));
@@ -89,15 +64,7 @@ class Database extends Translation implements DriverInterface
         ]);
     }
 
-    /**
-     * Add a new group type translation.
-     *
-     * @param string $language
-     * @param string $key
-     * @param string $value
-     * @return void
-     */
-    public function addGroupTranslation($language, $group, $key, $value = '')
+    public function addGroupTranslation(string $language, string $group, string $key, string $value = ''): void
     {
         if (! $this->languageExists($language)) {
             $this->addLanguage($language);
@@ -116,15 +83,7 @@ class Database extends Translation implements DriverInterface
             ]);
     }
 
-    /**
-     * Add a new single type translation.
-     *
-     * @param string $language
-     * @param string $key
-     * @param string $value
-     * @return void
-     */
-    public function addSingleTranslation($language, $vendor, $key, $value = '')
+    public function addSingleTranslation(string $language, string $vendor, string $key, string $value = ''): void
     {
         if (! $this->languageExists($language)) {
             $this->addLanguage($language);
@@ -142,13 +101,7 @@ class Database extends Translation implements DriverInterface
             ]);
     }
 
-    /**
-     * Get all of the single translations for a given language.
-     *
-     * @param string $language
-     * @return Collection
-     */
-    public function getSingleTranslationsFor($language)
+    public function getSingleTranslationsFor(string $language): Collection
     {
         $translations = $this->getLanguage($language)
             ->translations()
@@ -166,20 +119,18 @@ class Database extends Translation implements DriverInterface
             return $this->getSingleTranslationsFor($language);
         }
 
-        return $translations->map(function ($translations, $group) use ($language) {
-            return $translations->mapWithKeys(function ($translation) {
-                return [$translation->key => $translation->value];
+        $translationArray = [];
+
+        $translations->map(function ($translations) use (&$translationArray) {
+            $translations->map(function ($translation) use (&$translationArray) {
+                Arr::set($translationArray, "{$translation->group}.{$translation->key}", $translation->value);
             });
         });
+
+        return collect($translationArray);
     }
 
-    /**
-     * Get all of the group translations for a given language.
-     *
-     * @param string $language
-     * @return Collection
-     */
-    public function getGroupTranslationsFor($language)
+    public function getGroupTranslationsFor(string $language): Collection
     {
         $translations = $this->getLanguage($language)
             ->translations()
@@ -188,31 +139,23 @@ class Database extends Translation implements DriverInterface
             ->get()
             ->groupBy('group');
 
-        return $translations->map(function ($translations) {
-            return $translations->mapWithKeys(function ($translation) {
-                return [$translation->key => $translation->value];
+        $translationArray = [];
+
+        $translations->map(function ($translations) use (&$translationArray) {
+            $translations->map(function ($translation) use (&$translationArray) {
+                Arr::set($translationArray, "{$translation->group}.{$translation->key}", $translation->value);
             });
         });
+
+        return collect($translationArray);
     }
 
-    /**
-     * Determine whether or not a language exists.
-     *
-     * @param string $language
-     * @return bool
-     */
-    public function languageExists($language)
+    public function languageExists(string $language): bool
     {
         return $this->getLanguage($language) ? true : false;
     }
 
-    /**
-     * Get a collection of group names for a given language.
-     *
-     * @param string $language
-     * @return Collection
-     */
-    public function getGroupsFor($language)
+    public function getGroupsFor(string $language): Collection
     {
         return $this->allGroup($language);
     }
