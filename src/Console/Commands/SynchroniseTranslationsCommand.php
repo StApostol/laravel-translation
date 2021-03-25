@@ -117,7 +117,7 @@ class SynchroniseTranslationsCommand extends Command
             return new File(new Filesystem, app('path.lang'), config('app.locale'), $this->scanner);
         }
 
-        return new Database(config('app.locale'), $this->scanner);
+        return new Database(config('app.locale'), $this->scanner, cache());
     }
 
     private function mergeLanguages($driver, $languages): void
