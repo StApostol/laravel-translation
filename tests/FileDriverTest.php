@@ -368,7 +368,7 @@ class FileDriverTest extends TestCase
     {
         $this->post(config('translation.ui_url').'/en', ['group' => 'test', 'key' => 'hello', 'value' => 'Hello there!'])
             ->assertStatus(200)
-            ->assertSee(json_encode(['success' => true]));
+            ->assertJson(['success' => true]);
         $translations = $this->translation->getGroupTranslationsFor('en');
 
         $this->assertEquals([
