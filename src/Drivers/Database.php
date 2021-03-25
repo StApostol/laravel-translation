@@ -16,8 +16,6 @@ class Database extends Translation implements DriverInterface
     protected string $sourceLanguage;
     protected Scanner $scanner;
 
-    private $languages = [];
-    private $translations = [];
     private CacheRepository $cacheRepository;
 
     public function __construct(string $sourceLanguage, Scanner $scanner, CacheFactory $cacheRepository)
@@ -173,18 +171,13 @@ class Database extends Translation implements DriverInterface
     /**
      * Get a language from the database.
      *
-     * @param string $language
      * @return Language
      */
-    private function getLanguage($language)
+    private function getLanguage(string $language)
     {
-        if (isset($this->languages[$language])) {
-            return $this->languages[$language];
-        }
-
-        $this->languages[$language] = Language::where('language', $language)->first();
-
-        return $this->languages[$language];
+        return $this->cacheRepository->remember("language.{$language}", 60, function () use ($language) {
+            return Language::where('language', $language)->first();
+        });
     }
 
     /**
