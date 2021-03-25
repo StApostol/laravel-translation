@@ -16,9 +16,9 @@ class SynchroniseMissingTranslationKeys extends BaseCommand
             // automagically sync all languages
             $this->translation->saveMissingTranslations($language);
 
-            return $this->info(__('translation::translation.keys_synced'));
+            $this->info(__('translation::translation.keys_synced'));
         } catch (\Exception $e) {
-            return $this->error($e->getMessage());
+            $this->error($e->getMessage());
 
             return self::FAILURE;
         }
