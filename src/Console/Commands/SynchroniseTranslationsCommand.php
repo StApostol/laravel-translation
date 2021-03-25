@@ -11,56 +11,16 @@ use JoeDixon\Translation\Scanner;
 
 class SynchroniseTranslationsCommand extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
     protected $signature = 'translation:sync-translations {from?} {to?} {language?}';
-
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
     protected $description = 'Synchronise translations between drivers';
 
-    /**
-     * File scanner.
-     *
-     * @var Scanner
-     */
-    private $scanner;
+    private Scanner $scanner;
+    private Translation $translation;
 
-    /**
-     * Translation.
-     *
-     * @var Translation
-     */
-    private $translation;
-
-    /**
-     * From driver.
-     */
     private $fromDriver;
-
-    /**
-     * To driver.
-     */
     private $toDriver;
-
-    /**
-     * Translation drivers.
-     *
-     * @var array
-     */
     private $drivers = ['file', 'database'];
 
-    /**
-     * Create a new command instance.
-     *
-     * @return void
-     */
     public function __construct(Scanner $scanner, Translation $translation)
     {
         parent::__construct();
@@ -68,12 +28,7 @@ class SynchroniseTranslationsCommand extends Command
         $this->translation = $translation;
     }
 
-    /**
-     * Execute the console command.
-     *
-     * @return mixed
-     */
-    public function handle()
+    public function handle(): int
     {
         $languages = array_keys($this->translation->allLanguages()->toArray());
 
@@ -87,7 +42,9 @@ class SynchroniseTranslationsCommand extends Command
             $this->fromDriver = $this->anticipate(__('translation::translation.prompt_from_driver'), $this->drivers);
 
             if (! in_array($this->fromDriver, $this->drivers)) {
-                return $this->error(__('translation::translation.invalid_driver'));
+                $this->error(__('translation::translation.invalid_driver'));
+
+                return self::FAILURE;
             }
         }
 
@@ -104,7 +61,9 @@ class SynchroniseTranslationsCommand extends Command
             $this->toDriver = $this->anticipate(__('translation::translation.prompt_to_driver'), $this->drivers);
 
             if (! in_array($this->toDriver, $this->drivers)) {
-                return $this->error(__('translation::translation.invalid_driver'));
+                $this->error(__('translation::translation.invalid_driver'));
+
+                return self::FAILURE;
             }
         }
 
@@ -122,14 +81,18 @@ class SynchroniseTranslationsCommand extends Command
             elseif (in_array($this->argument('language'), $languages)) {
                 $language = $this->argument('language');
             } else {
-                return $this->error(__('translation::translation.invalid_language'));
+                $this->error(__('translation::translation.invalid_language'));
+
+                return self::FAILURE;
             }
         } // When the language will be entered manually or if the argument is invalid.
         else {
             $language = $this->anticipate(__('translation::translation.prompt_language_if_any'), $languages);
 
             if ($language && ! in_array($language, $languages)) {
-                return $this->error(__('translation::translation.invalid_language'));
+                $this->error(__('translation::translation.invalid_language'));
+
+                return self::FAILURE;
             }
         }
 
@@ -144,6 +107,8 @@ class SynchroniseTranslationsCommand extends Command
         }
 
         $this->info(__('translation::translation.synced'));
+
+        return self::SUCCESS;
     }
 
     private function createDriver($driver)
@@ -155,40 +120,61 @@ class SynchroniseTranslationsCommand extends Command
         return new Database(config('app.locale'), $this->scanner);
     }
 
-    private function mergeLanguages($driver, $languages)
+    private function mergeLanguages($driver, $languages): void
     {
         foreach ($languages as $language => $translations) {
             $this->mergeTranslations($driver, $language, $translations);
         }
     }
 
-    private function mergeTranslations($driver, $language, $translations)
+    private function mergeTranslations($driver, $language, $translations): void
     {
         $this->mergeGroupTranslations($driver, $language, $translations['group']);
         $this->mergeSingleTranslations($driver, $language, $translations['single']);
     }
 
-    private function mergeGroupTranslations($driver, $language, $groups)
+    private function mergeGroupTranslations($driver, $language, $groups): void
     {
         foreach ($groups as $group => $translations) {
             foreach ($translations as $key => $value) {
                 if (is_array($value)) {
+                    $this->insertRecursiveArrayValue($driver, $language, $group, $key, $value);
+
                     continue;
                 }
+
                 $driver->addGroupTranslation($language, $group, $key, $value);
             }
         }
     }
 
-    private function mergeSingleTranslations($driver, $language, $vendors)
+    private function mergeSingleTranslations($driver, $language, $vendors): void
     {
         foreach ($vendors as $vendor => $translations) {
             foreach ($translations as $key => $value) {
                 if (is_array($value)) {
+                    $this->insertRecursiveArrayValue($driver, $language, $vendor, $key, $value);
+
                     continue;
                 }
+
                 $driver->addSingleTranslation($language, $vendor, $key, $value);
             }
+        }
+    }
+
+    private function insertRecursiveArrayValue($driver, $language, $group, $parentKey, array $values): void
+    {
+        foreach ($values as $key => $value) {
+            $translateKey = "$parentKey.$key";
+
+            if (is_array($value)) {
+                $this->insertRecursiveArrayValue($driver, $language, $group, $translateKey, $value);
+
+                continue;
+            }
+
+            $driver->addGroupTranslation($language, $group, $translateKey, $value);
         }
     }
 }
