@@ -2,6 +2,8 @@
 
 namespace JoeDixon\Translation\Drivers;
 
+use Illuminate\Contracts\Cache\Factory as CacheFactory;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use JoeDixon\Translation\Exceptions\LanguageExistsException;
@@ -12,13 +14,17 @@ use JoeDixon\Translation\Translation as TranslationModel;
 class Database extends Translation implements DriverInterface
 {
     protected string $sourceLanguage;
-
     protected Scanner $scanner;
 
-    public function __construct(string $sourceLanguage, Scanner$scanner)
+    private $languages = [];
+    private $translations = [];
+    private CacheRepository $cacheRepository;
+
+    public function __construct(string $sourceLanguage, Scanner $scanner, CacheFactory $cacheRepository)
     {
         $this->sourceLanguage = $sourceLanguage;
         $this->scanner = $scanner;
+        $this->cacheRepository = $cacheRepository->store('array');
     }
 
     public function allLanguages(): Collection
@@ -66,7 +72,7 @@ class Database extends Translation implements DriverInterface
 
     public function addGroupTranslation(string $language, string $group, string $key, string $value = ''): void
     {
-        if (! $this->languageExists($language)) {
+        if (!$this->languageExists($language)) {
             $this->addLanguage($language);
         }
 
@@ -85,7 +91,7 @@ class Database extends Translation implements DriverInterface
 
     public function addSingleTranslation(string $language, string $vendor, string $key, string $value = ''): void
     {
-        if (! $this->languageExists($language)) {
+        if (!$this->languageExists($language)) {
             $this->addLanguage($language);
         }
 
@@ -103,12 +109,14 @@ class Database extends Translation implements DriverInterface
 
     public function getSingleTranslationsFor(string $language): Collection
     {
-        $translations = $this->getLanguage($language)
-            ->translations()
-            ->where('group', 'like', '%single')
-            ->orWhereNull('group')
-            ->get()
-            ->groupBy('group');
+        $translations = $this->cacheRepository->remember("language.{$language}.single", 60, function () use ($language) {
+            return $this->getLanguage($language)
+                ->translations()
+                ->where('group', 'like', '%single')
+                ->orWhereNull('group')
+                ->get()
+                ->groupBy('group');
+        });
 
         // if there is no group, this is a legacy translation so we need to
         // update to 'single'. We do this here so it only happens once.
@@ -132,12 +140,14 @@ class Database extends Translation implements DriverInterface
 
     public function getGroupTranslationsFor(string $language): Collection
     {
-        $translations = $this->getLanguage($language)
-            ->translations()
-            ->whereNotNull('group')
-            ->where('group', 'not like', '%single')
-            ->get()
-            ->groupBy('group');
+        $translations = $this->cacheRepository->remember("language.{$language}.group", 60, function () use ($language) {
+            return $this->getLanguage($language)
+                ->translations()
+                ->whereNotNull('group')
+                ->where('group', 'not like', '%single')
+                ->get()
+                ->groupBy('group');
+        });
 
         $translationArray = [];
 
@@ -168,18 +178,21 @@ class Database extends Translation implements DriverInterface
      */
     private function getLanguage($language)
     {
-        return Language::where('language', $language)->first();
+        if (isset($this->languages[$language])) {
+            return $this->languages[$language];
+        }
+
+        $this->languages[$language] = Language::where('language', $language)->first();
+
+        return $this->languages[$language];
     }
 
     /**
      * Determine if a set of single translations contains any legacy groups.
      * Previously, this was handled by setting the group value to NULL, now
      * we use 'single' to cater for vendor JSON language files.
-     *
-     * @param Collection $groups
-     * @return bool
      */
-    private function hasLegacyGroups($groups)
+    private function hasLegacyGroups(Collection $groups): bool
     {
         return $groups->filter(function ($key) {
             return $key === '';

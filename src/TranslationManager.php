@@ -10,12 +10,10 @@ use JoeDixon\Translation\Drivers\File;
 class TranslationManager
 {
     private $app;
-
     private $config;
+    private Scanner $scanner;
 
-    private $scanner;
-
-    public function __construct($app, $config, $scanner)
+    public function __construct($app, $config, Scanner $scanner)
     {
         $this->app = $app;
         $this->config = $config;
@@ -28,20 +26,20 @@ class TranslationManager
         $driverResolver = Str::studly($driver);
         $method = "resolve{$driverResolver}Driver";
 
-        if (! method_exists($this, $method)) {
+        if (!method_exists($this, $method)) {
             throw new \InvalidArgumentException("Invalid driver [$driver]");
         }
 
         return $this->{$method}();
     }
 
-    protected function resolveFileDriver()
+    protected function resolveFileDriver(): File
     {
         return new File(new Filesystem, $this->app['path.lang'], $this->app->config['app']['locale'], $this->scanner);
     }
 
-    protected function resolveDatabaseDriver()
+    protected function resolveDatabaseDriver(): Database
     {
-        return new Database($this->app->config['app']['locale'], $this->scanner);
+        return new Database($this->app->config['app']['locale'], $this->scanner, $this->app->cache);
     }
 }
