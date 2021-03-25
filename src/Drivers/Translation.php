@@ -46,10 +46,13 @@ abstract class Translation
             return $groups->map(function ($translations, $group) use ($type, $language, $languageTranslations) {
                 $translations = $translations instanceof Collection ? $translations->toArray() : $translations;
 
-                array_walk($translations, function (&$value, &$key) use ($type, $group, $language, $languageTranslations) {
+                $translations = self::flatternToOneKey($translations);
+                $languageTranslationsByTypeAndGroup = self::flatternToOneKey($languageTranslations->get($type, collect())->get($group, []));
+
+                array_walk($translations, function (&$value, &$key) use ($type, $language, $languageTranslationsByTypeAndGroup) {
                     $value = [
                         $this->sourceLanguage => $value,
-                        $language => Arr::get($languageTranslations->get($type, collect())->get($group, collect()), $key),
+                        $language => Arr::get($languageTranslationsByTypeAndGroup, $key),
                     ];
                 });
 
@@ -75,5 +78,22 @@ abstract class Translation
                 return $keys->isNotEmpty();
             });
         });
+    }
+
+    private static function flatternToOneKey(iterable $array, string $prefix = ''): array
+    {
+        $result = [];
+
+        foreach ($array as $key => $value) {
+            if (!is_array($value)) {
+                $result[$prefix.$key] = $value;
+
+                continue;
+            }
+
+            $result = array_merge($result, self::flatternToOneKey($value, $prefix.$key.'.'));
+        }
+
+        return $result;
     }
 }
