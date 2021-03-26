@@ -17,17 +17,23 @@ class DatabaseDriverTest extends TestCase
 
     private $translation;
 
-    /**
-     * Setup the test environment.
-     */
-    public function setUp(): void
+    protected function setUp(): void
     {
         parent::setUp();
+
         $this->withFactories(__DIR__.'/../database/factories');
         $this->translation = $this->app[Translation::class];
     }
 
-    protected function getEnvironmentSetUp($app)
+    protected function tearDown(): void
+    {
+        $this->app->forgetInstance(Translation::class);
+        unset($this->translation);
+
+        parent::tearDown();
+    }
+
+    protected function getEnvironmentSetUp($app): void
     {
         $app['config']->set('translation.driver', 'database');
         $app['config']->set('database.default', 'testing');
@@ -37,7 +43,10 @@ class DatabaseDriverTest extends TestCase
         ]);
     }
 
-    protected function getPackageProviders($app)
+    /**
+     * @return string[]
+     */
+    protected function getPackageProviders($app): array
     {
         return [
             TranslationServiceProvider::class,
@@ -46,7 +55,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function it_returns_all_languages()
+    public function it_returns_all_languages(): void
     {
         $newLanguages = factory(Language::class, 2)->create();
         $newLanguages = $newLanguages->mapWithKeys(function ($language) {
@@ -59,7 +68,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function it_returns_all_translations()
+    public function it_returns_all_translations(): void
     {
         $default = Language::where('language', config('app.locale'))->first();
         $spanish = factory(Language::class)->create(['language' => 'es', 'name' => 'Español']);
@@ -98,7 +107,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function it_returns_all_translations_for_a_given_language()
+    public function it_returns_all_translations_for_a_given_language(): void
     {
         $default = Language::where('language', config('app.locale'))->first();
         factory(TranslationModel::class)->states('group')->create(['language_id' => $default->id, 'group' => 'test', 'key' => 'hello', 'value' => 'Hello']);
@@ -117,14 +126,14 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function it_throws_an_exception_if_a_language_exists()
+    public function it_throws_an_exception_if_a_language_exists(): void
     {
         $this->expectException(LanguageExistsException::class);
         $this->translation->addLanguage('en');
     }
 
     /** @test */
-    public function it_can_add_a_new_language()
+    public function it_can_add_a_new_language(): void
     {
         $this->assertDatabaseMissing(config('translation.database.languages_table'), [
             'language' => 'fr',
@@ -139,7 +148,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function it_can_add_a_new_translation_to_a_new_group()
+    public function it_can_add_a_new_translation_to_a_new_group(): void
     {
         $this->translation->addGroupTranslation('es', 'test', 'hello', 'Hola!');
 
@@ -149,7 +158,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function it_can_add_a_new_translation_to_an_existing_translation_group()
+    public function it_can_add_a_new_translation_to_an_existing_translation_group(): void
     {
         $translation = factory(TranslationModel::class)->create();
 
@@ -161,7 +170,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function it_can_add_a_new_single_translation()
+    public function it_can_add_a_new_single_translation(): void
     {
         $this->translation->addSingleTranslation('es', 'single', 'Hello', 'Hola!');
 
@@ -171,7 +180,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function it_can_add_a_new_single_translation_to_an_existing_language()
+    public function it_can_add_a_new_single_translation_to_an_existing_language(): void
     {
         $translation = factory(TranslationModel::class)->states('single')->create();
 
@@ -183,9 +192,10 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function it_can_get_a_collection_of_group_names_for_a_given_language()
+    public function it_can_get_a_collection_of_group_names_for_a_given_language(): void
     {
-        $language = factory(Language::class)->create(['language' => 'en']);
+        $language = Language::where(['language' => 'en'])->first();
+
         factory(TranslationModel::class)->create([
             'language_id' => $language->id,
             'group' => 'test',
@@ -197,7 +207,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function it_can_merge_a_language_with_the_base_language()
+    public function it_can_merge_a_language_with_the_base_language(): void
     {
         $default = Language::where('language', config('app.locale'))->first();
         factory(TranslationModel::class)->states('group')->create(['language_id' => $default->id, 'group' => 'test', 'key' => 'hello', 'value' => 'Hello']);
@@ -208,7 +218,7 @@ class DatabaseDriverTest extends TestCase
         $this->translation->addGroupTranslation('es', 'test', 'hello', 'Hola!');
         $translations = $this->translation->getSourceLanguageTranslationsWith('es');
 
-        $this->assertEquals($translations->toArray(), [
+        $this->assertEquals([
             'group' => [
                 'test' => [
                     'hello' => ['en' => 'Hello', 'es' => 'Hola!'],
@@ -227,11 +237,11 @@ class DatabaseDriverTest extends TestCase
                     ],
                 ],
             ],
-        ]);
+        ], $translations->toArray());
     }
 
     /** @test */
-    public function it_can_add_a_vendor_namespaced_translations()
+    public function it_can_add_a_vendor_namespaced_translations(): void
     {
         $this->translation->addGroupTranslation('es', 'translation_test::test', 'hello', 'Hola!');
 
@@ -246,7 +256,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function it_can_add_a_nested_translation()
+    public function it_can_add_a_nested_translation(): void
     {
         $this->translation->addGroupTranslation('en', 'test', 'test.nested', 'Nested!');
 
@@ -260,7 +270,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function it_can_add_nested_vendor_namespaced_translations()
+    public function it_can_add_nested_vendor_namespaced_translations(): void
     {
         $this->translation->addGroupTranslation('es', 'translation_test::test', 'nested.hello', 'Hola!');
 
@@ -277,24 +287,27 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function it_can_merge_a_namespaced_language_with_the_base_language()
+    public function it_can_merge_a_namespaced_language_with_the_base_language(): void
     {
         $this->translation->addGroupTranslation('en', 'translation_test::test', 'hello', 'Hello');
         $this->translation->addGroupTranslation('es', 'translation_test::test', 'hello', 'Hola!');
         $translations = $this->translation->getSourceLanguageTranslationsWith('es');
 
-        $this->assertEquals($translations->toArray(), [
+        $this->assertEquals([
             'group' => [
                 'translation_test::test' => [
-                    'hello' => ['en' => 'Hello', 'es' => 'Hola!'],
+                    'hello' => [
+                        'en' => 'Hello',
+                        'es' => 'Hola!',
+                    ],
                 ],
             ],
             'single' => [],
-        ]);
+        ], $translations->toArray());
     }
 
     /** @test */
-    public function a_list_of_languages_can_be_viewed()
+    public function a_list_of_languages_can_be_viewed(): void
     {
         $newLanguages = factory(Language::class, 2)->create();
         $response = $this->get(config('translation.ui_url'));
@@ -306,7 +319,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function the_language_creation_page_can_be_viewed()
+    public function the_language_creation_page_can_be_viewed(): void
     {
         $this->translation->addGroupTranslation(config('app.locale'), 'translation::translation', 'add_language', 'Add a new language');
         $this->get(config('translation.ui_url').'/create')
@@ -323,7 +336,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function a_list_of_translations_can_be_viewed()
+    public function a_list_of_translations_can_be_viewed(): void
     {
         $default = Language::where('language', config('app.locale'))->first();
         factory(TranslationModel::class)->states('group')->create(['language_id' => $default->id, 'group' => 'test', 'key' => 'hello', 'value' => 'Hello']);
@@ -339,7 +352,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function the_translation_creation_page_can_be_viewed()
+    public function the_translation_creation_page_can_be_viewed(): void
     {
         $this->translation->addGroupTranslation('en', 'translation::translation', 'add_translation', 'Add a translation');
         $this->get(config('translation.ui_url').'/'.config('app.locale').'/translations/create')
@@ -347,7 +360,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function a_new_translation_can_be_added()
+    public function a_new_translation_can_be_added(): void
     {
         $this->post(config('translation.ui_url').'/'.config('app.locale').'/translations', ['group' => 'single', 'key' => 'joe', 'value' => 'is cool'])
             ->assertRedirect();
@@ -356,7 +369,7 @@ class DatabaseDriverTest extends TestCase
     }
 
     /** @test */
-    public function a_translation_can_be_updated()
+    public function a_translation_can_be_updated(): void
     {
         $default = Language::where('language', config('app.locale'))->first();
         factory(TranslationModel::class)->states('group')->create(['language_id' => $default->id, 'group' => 'test', 'key' => 'hello', 'value' => 'Hello']);

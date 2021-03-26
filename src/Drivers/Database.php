@@ -4,8 +4,10 @@ namespace JoeDixon\Translation\Drivers;
 
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use JoeDixon\Translation\Exceptions\LanguageExistsException;
 use JoeDixon\Translation\Language;
 use JoeDixon\Translation\Scanner;
@@ -34,11 +36,10 @@ class Database extends Translation implements DriverInterface
 
     public function allGroup(string $language): Collection
     {
-        $groups = TranslationModel::getGroupsForLanguage($language);
-
-        return $groups->map(function ($translation) {
-            return $translation->group;
-        });
+        return TranslationModel::getGroupsForLanguage($language)
+            ->map(function (TranslationModel $translation) {
+                return $translation->group;
+            });
     }
 
     public function allTranslations(): Collection
@@ -74,8 +75,7 @@ class Database extends Translation implements DriverInterface
             $this->addLanguage($language);
         }
 
-        Language::where('language', $language)
-            ->first()
+        $this->getLanguage($language)
             ->translations()
             ->updateOrCreate([
                 'group' => $group,
@@ -93,8 +93,7 @@ class Database extends Translation implements DriverInterface
             $this->addLanguage($language);
         }
 
-        Language::where('language', $language)
-            ->first()
+        $this->getLanguage($language)
             ->translations()
             ->updateOrCreate([
                 'group' => $vendor,
@@ -107,60 +106,50 @@ class Database extends Translation implements DriverInterface
 
     public function getSingleTranslationsFor(string $language): Collection
     {
-        $translations = $this->cacheRepository->remember("language.{$language}.single", 60, function () use ($language) {
-            return $this->getLanguage($language)
-                ->translations()
-                ->where('group', 'like', '%single')
-                ->orWhereNull('group')
-                ->get()
-                ->groupBy('group');
-        });
-
-        // if there is no group, this is a legacy translation so we need to
-        // update to 'single'. We do this here so it only happens once.
-        if ($this->hasLegacyGroups($translations->keys())) {
-            TranslationModel::whereNull('group')->update(['group' => 'single']);
-            // if any legacy groups exist, rerun the method so we get the
-            // updated keys.
-            return $this->getSingleTranslationsFor($language);
+        if ($this->cacheRepository->has("language.{$language}.single")) {
+            return $this->cacheRepository->get("language.{$language}.single");
         }
 
         $translationArray = [];
 
-        $translations->map(function ($translations) use (&$translationArray) {
-            $translations->map(function ($translation) use (&$translationArray) {
+        $this->getBaseSelectTranslateQuery()
+            ->where('language', $language)
+            ->where('group', 'like', '%single')
+            ->cursor()
+            ->each(function ($translation) use (&$translationArray) {
                 Arr::set($translationArray, "{$translation->group}.{$translation->key}", $translation->value);
             });
-        });
 
-        return collect($translationArray);
+        $this->cacheRepository->set("language.{$language}.single", collect($translationArray));
+
+        return $this->cacheRepository->get("language.{$language}.single", collect());
     }
 
     public function getGroupTranslationsFor(string $language): Collection
     {
-        $translations = $this->cacheRepository->remember("language.{$language}.group", 60, function () use ($language) {
-            return $this->getLanguage($language)
-                ->translations()
-                ->whereNotNull('group')
-                ->where('group', 'not like', '%single')
-                ->get()
-                ->groupBy('group');
-        });
+        if ($this->cacheRepository->has("language.{$language}.group")) {
+            return $this->cacheRepository->get("language.{$language}.group");
+        }
 
         $translationArray = [];
 
-        $translations->map(function ($translations) use (&$translationArray) {
-            $translations->map(function ($translation) use (&$translationArray) {
+        $this->getBaseSelectTranslateQuery()
+            ->where('language', $language)
+            ->whereNotNull('group')
+            ->where('group', 'not like', '%single')
+            ->cursor()
+            ->each(function ($translation) use (&$translationArray) {
                 Arr::set($translationArray, "{$translation->group}.{$translation->key}", $translation->value);
             });
-        });
 
-        return collect($translationArray);
+        $this->cacheRepository->set("language.{$language}.group", collect($translationArray));
+
+        return $this->cacheRepository->get("language.{$language}.group", collect());
     }
 
     public function languageExists(string $language): bool
     {
-        return $this->getLanguage($language) ? true : false;
+        return (bool) $this->getLanguage($language);
     }
 
     public function getGroupsFor(string $language): Collection
@@ -168,27 +157,20 @@ class Database extends Translation implements DriverInterface
         return $this->allGroup($language);
     }
 
-    /**
-     * Get a language from the database.
-     *
-     * @return Language
-     */
-    private function getLanguage(string $language)
+    private function getBaseSelectTranslateQuery(): Builder
     {
-        return $this->cacheRepository->remember("language.{$language}", 60, function () use ($language) {
-            return Language::where('language', $language)->first();
-        });
+        $languageModel = new Language();
+        $translationModel = new TranslationModel();
+
+        return DB::query()
+            ->select(['group', 'key', 'value'])
+            ->from($translationModel->getTable())
+            ->leftJoin($languageModel->getTable(), $languageModel->getTable().'.id', '=', 'language_id')
+            ->whereNotNull('group');
     }
 
-    /**
-     * Determine if a set of single translations contains any legacy groups.
-     * Previously, this was handled by setting the group value to NULL, now
-     * we use 'single' to cater for vendor JSON language files.
-     */
-    private function hasLegacyGroups(Collection $groups): bool
+    private function getLanguage(string $language): ?Language
     {
-        return $groups->filter(function ($key) {
-            return $key === '';
-        })->count() > 0;
+        return Language::where('language', $language)->first();
     }
 }
