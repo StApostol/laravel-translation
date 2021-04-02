@@ -15,7 +15,7 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Route group configuration
+    | Route configuration
     |--------------------------------------------------------------------------
     |
     | The package ships with routes to handle language management. Update the
@@ -24,6 +24,11 @@ return [
     */
     'route_group_config' => [
         'middleware' => 'web',
+    ],
+
+    'controllers' => [
+        'language' => \JoeDixon\Translation\Http\Controllers\LanguageController::class,
+        'languageTranslation' => \JoeDixon\Translation\Http\Controllers\LanguageTranslationController::class,
     ],
 
     /*

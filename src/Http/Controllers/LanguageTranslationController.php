@@ -2,25 +2,29 @@
 
 namespace JoeDixon\Translation\Http\Controllers;
 
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Illuminate\View\View;
 use JoeDixon\Translation\Drivers\Translation;
 use JoeDixon\Translation\Http\Requests\TranslationRequest;
 
 class LanguageTranslationController extends Controller
 {
-    private $translation;
+    private Translation $translation;
 
     public function __construct(Translation $translation)
     {
         $this->translation = $translation;
     }
 
-    public function index(Request $request, $language)
+    /**
+     * @return View|RedirectResponse
+     */
+    public function index(Request $request, string $language)
     {
-        // dd($this->translation->getSingleTranslationsFor('en'));
         if ($request->has('language') && $request->get('language') !== $language) {
             return redirect()
                 ->route('languages.translations.index', ['language' => $request->get('language'), 'group' => $request->get('group'), 'filter' => $request->get('filter')]);
@@ -46,12 +50,12 @@ class LanguageTranslationController extends Controller
         return view('translation::languages.translations.index', compact('language', 'languages', 'groups', 'translations'));
     }
 
-    public function create(Request $request, $language)
+    public function create(string $language): View
     {
         return view('translation::languages.translations.create', compact('language'));
     }
 
-    public function store(TranslationRequest $request, $language)
+    public function store(TranslationRequest $request, string $language): RedirectResponse
     {
         if ($request->filled('group')) {
             $namespace = $request->has('namespace') && $request->get('namespace') ? "{$request->get('namespace')}::" : '';
@@ -65,7 +69,7 @@ class LanguageTranslationController extends Controller
             ->with('success', __('translation::translation.translation_added'));
     }
 
-    public function update(Request $request, $language)
+    public function update(Request $request, string $language): array
     {
         if (! Str::contains($request->get('group'), 'single')) {
             $this->translation->addGroupTranslation($language, $request->get('group'), $request->get('key'), $request->get('value') ?: '');
