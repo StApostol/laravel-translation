@@ -3,16 +3,19 @@
 namespace JoeDixon\Translation;
 
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Arr;
 
 class Scanner
 {
-    private $disk;
+    private Filesystem $disk;
 
-    private $scanPaths;
+    /** @var string[] */
+    private array $scanPaths;
 
-    private $translationMethods;
+    /** @var string[] */
+    private array $translationMethods;
 
-    public function __construct(Filesystem $disk, $scanPaths, $translationMethods)
+    public function __construct(Filesystem $disk, array $scanPaths, array $translationMethods)
     {
         $this->disk = $disk;
         $this->scanPaths = $scanPaths;
@@ -21,10 +24,8 @@ class Scanner
 
     /**
      * Scan all the files in the provided $scanPath for translations.
-     *
-     * @return array
      */
-    public function findTranslations()
+    public function findTranslations(): array
     {
         $results = ['single' => [], 'group' => []];
 
@@ -47,12 +48,12 @@ class Scanner
             if (preg_match_all("/$matchingPattern/siU", $file->getContents(), $matches)) {
                 foreach ($matches[2] as $key) {
                     if (preg_match("/(^[a-zA-Z0-9:_-]+([.][^\1)\ ]+)+$)/siU", $key, $arrayMatches)) {
-                        [$file, $k] = explode('.', $arrayMatches[0], 2);
-                        $results['group'][$file][$k] = '';
+                        Arr::set($results, "group.$key", '');
+
                         continue;
-                    } else {
-                        $results['single']['single'][$key] = '';
                     }
+
+                    Arr::set($results, "single.single.$key", '');
                 }
             }
         }

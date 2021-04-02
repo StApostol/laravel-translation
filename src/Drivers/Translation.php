@@ -10,10 +10,9 @@ abstract class Translation
 {
     public function findMissingTranslations(string $language): array
     {
-        return array_diff_assoc_recursive(
-            $this->scanner->findTranslations(),
-            $this->allTranslationsFor($language)
-        );
+        $languageTranslations = $this->allTranslationsFor($language)->map(fn ($item, $key) => $item->toArray())->toArray();
+
+        return array_diff_assoc_recursive($this->scanner->findTranslations(), $languageTranslations);
     }
 
     public function saveMissingTranslations(?string $language = null): void

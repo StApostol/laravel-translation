@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 use JoeDixon\Translation\Exceptions\LanguageExistsException;
 use JoeDixon\Translation\Scanner;
 
-class File extends Translation implements DriverInterface
+class File extends Translation implements DriverInterface, FileDriverInterface
 {
     protected string $sourceLanguage;
     protected Scanner $scanner;

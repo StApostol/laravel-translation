@@ -13,7 +13,7 @@ use JoeDixon\Translation\Language;
 use JoeDixon\Translation\Scanner;
 use JoeDixon\Translation\Translation as TranslationModel;
 
-class Database extends Translation implements DriverInterface
+class Database extends Translation implements DriverInterface, DatabaseDriverInterface
 {
     protected string $sourceLanguage;
     protected Scanner $scanner;

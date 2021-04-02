@@ -3,7 +3,6 @@
 namespace JoeDixon\Translation\Tests;
 
 use Illuminate\Filesystem\Filesystem;
-use Illuminate\Foundation\Application;
 use JoeDixon\Translation\Drivers\File;
 use JoeDixon\Translation\Drivers\Translation;
 use JoeDixon\Translation\Exceptions\LanguageExistsException;
@@ -41,7 +40,7 @@ class FileDriverTest extends TestCase
         parent::tearDown();
     }
 
-    protected function getPackageProviders(Application $app): array
+    protected function getPackageProviders($app): array
     {
         return [
             TranslationServiceProvider::class,

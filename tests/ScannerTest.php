@@ -21,7 +21,7 @@ class ScannerTest extends TestCase
 
     protected function getEnvironmentSetUp($app)
     {
-        $app['config']->set('translation.scan_paths', __DIR__.'/fixtures/scan-tests');
+        $app['config']->set('translation.scan_paths', [__DIR__.'/fixtures/scan-tests']);
         $app['config']->set('translation.translation_methods', ['__', 'trans', 'trans_choice', '@lang', 'Lang::get']);
     }
 

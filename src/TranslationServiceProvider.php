@@ -3,6 +3,7 @@
 namespace JoeDixon\Translation;
 
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 use JoeDixon\Translation\Console\Commands\AddLanguageCommand;
 use JoeDixon\Translation\Console\Commands\AddTranslationKeyCommand;
@@ -10,6 +11,10 @@ use JoeDixon\Translation\Console\Commands\ListLanguagesCommand;
 use JoeDixon\Translation\Console\Commands\ListMissingTranslationKeys;
 use JoeDixon\Translation\Console\Commands\SynchroniseMissingTranslationKeys;
 use JoeDixon\Translation\Console\Commands\SynchroniseTranslationsCommand;
+use JoeDixon\Translation\Drivers\Database;
+use JoeDixon\Translation\Drivers\DatabaseDriverInterface;
+use JoeDixon\Translation\Drivers\File;
+use JoeDixon\Translation\Drivers\FileDriverInterface;
 use JoeDixon\Translation\Drivers\Translation;
 
 class TranslationServiceProvider extends ServiceProvider
@@ -174,8 +179,26 @@ class TranslationServiceProvider extends ServiceProvider
             return new Scanner(new Filesystem, $config['scan_paths'], $config['translation_methods']);
         });
 
-        $this->app->singleton(Translation::class, function ($app) {
-            return (new TranslationManager($app, $app['config']['translation'], $app->make(Scanner::class)))->resolve();
+        $this->app->singleton(DatabaseDriverInterface::class, static function (Application $app): DatabaseDriverInterface {
+            return new Database($app['config']['app']['locale'], $app->make(Scanner::class), $app->cache);
+        });
+
+        $this->app->singleton(FileDriverInterface::class, static function (Application  $app): FileDriverInterface {
+            return new File(new Filesystem, $app['path.lang'], $app['config']['app']['locale'], $app->make(Scanner::class));
+        });
+
+        $this->app->singleton(Translation::class, function (Application $app) {
+            $driver = $app['config']['translation']['driver'];
+
+            if ($driver === 'file') {
+                return $app->make(FileDriverInterface::class);
+            }
+
+            if ($driver === 'database') {
+                return $app->make(DatabaseDriverInterface::class);
+            }
+
+            throw new \InvalidArgumentException("Invalid driver [$driver]");
         });
     }
 }
