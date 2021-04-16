@@ -13,7 +13,7 @@ use JoeDixon\Translation\Http\Requests\TranslationRequest;
 
 class LanguageTranslationController extends Controller
 {
-    private Translation $translation;
+    protected Translation $translation;
 
     public function __construct(Translation $translation)
     {
@@ -32,7 +32,10 @@ class LanguageTranslationController extends Controller
 
         $languages = $this->translation->allLanguages();
         $groups = $this->translation->getGroupsFor(config('app.locale'))->merge('single');
-        $translations = $this->translation->filterTranslationsFor($language, $request->get('filter'));
+
+        $sourcelanguage = $request->get('sourceLanguage', config('app.locale'));
+
+        $translations = $this->translation->filterTranslationsFor($language, $sourcelanguage, $request->get('filter'));
 
         if ($request->has('group') && $request->get('group')) {
             if ($request->get('group') === 'single') {

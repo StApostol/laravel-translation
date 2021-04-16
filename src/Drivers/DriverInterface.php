@@ -79,5 +79,5 @@ interface DriverInterface
     /**
      * Filter all keys and translations for a given language and string.
      */
-    public function filterTranslationsFor(string $language, ?string $filter = null): Collection;
+    public function filterTranslationsFor(string $language, string $sourceLanguage, ?string $filter = null): Collection;
 }

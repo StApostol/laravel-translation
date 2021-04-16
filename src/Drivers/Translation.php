@@ -36,22 +36,25 @@ abstract class Translation
         }
     }
 
-    public function getSourceLanguageTranslationsWith(string $language): Collection
+    public function getLanguageTranslationsWith(string $language, string $sourceLanguage): Collection
     {
-        $sourceTranslations = $this->allTranslationsFor($this->sourceLanguage);
+        $sourceTranslations = $this->allTranslationsFor($sourceLanguage);
         $languageTranslations = $this->allTranslationsFor($language);
+        $defaultSourceTranslations = $sourceLanguage === $this->sourceLanguage ? clone $sourceTranslations : $this->allTranslationsFor($this->sourceLanguage);
 
-        return $sourceTranslations->map(function ($groups, $type) use ($language, $languageTranslations) {
-            return $groups->map(function ($translations, $group) use ($type, $language, $languageTranslations) {
+        return $sourceTranslations->map(function ($groups, $type) use ($language, $languageTranslations, $sourceLanguage, $defaultSourceTranslations) {
+            return $groups->map(function ($translations, $group) use ($type, $language, $languageTranslations, $sourceLanguage, $defaultSourceTranslations) {
                 $translations = $translations instanceof Collection ? $translations->toArray() : $translations;
 
                 $translations = self::flatternToOneKey($translations);
                 $languageTranslationsByTypeAndGroup = self::flatternToOneKey($languageTranslations->get($type, collect())->get($group, []));
+                $defaultLanguageTranslationsByTypeAndGroup = self::flatternToOneKey($defaultSourceTranslations->get($type, collect())->get($group, []));
 
-                array_walk($translations, function (&$value, &$key) use ($type, $language, $languageTranslationsByTypeAndGroup) {
+                array_walk($translations, function (&$value, &$key) use ($type, $language, $languageTranslationsByTypeAndGroup, $sourceLanguage, $defaultLanguageTranslationsByTypeAndGroup) {
                     $value = [
-                        $this->sourceLanguage => $value,
+                        $sourceLanguage => $value,
                         $language => Arr::get($languageTranslationsByTypeAndGroup, $key),
+                        $this->sourceLanguage => Arr::get($defaultLanguageTranslationsByTypeAndGroup, $key),
                     ];
                 });
 
@@ -60,23 +63,29 @@ abstract class Translation
         });
     }
 
-    public function filterTranslationsFor(string $language, ?string $filter = null): Collection
+    public function getSourceLanguageTranslationsWith(string $language): Collection
     {
-        $allTranslations = $this->getSourceLanguageTranslationsWith(($language));
+        return $this->getLanguageTranslationsWith($language, $this->sourceLanguage);
+    }
 
-        if (! $filter) {
+    public function filterTranslationsFor(string $language, string $sourcelanguage, ?string $filter = null): Collection
+    {
+        $allTranslations = $this->getLanguageTranslationsWith($language, $sourcelanguage);
+
+        if (!$filter) {
             return $allTranslations;
         }
 
-        return $allTranslations->map(function ($groups, $type) use ($language, $filter) {
-            return $groups->map(function ($keys, $group) use ($language, $filter, $type) {
-                return collect($keys)->filter(function ($translations, $key) use ($group, $language, $filter, $type) {
-                    return strs_contain([$group, $key, $translations[$language], $translations[$this->sourceLanguage]], $filter);
-                });
-            })->filter(function ($keys) {
-                return $keys->isNotEmpty();
-            });
-        });
+        return $allTranslations->map(
+            fn ($groups, $type) => $groups
+                ->map(
+                    fn ($keys, $group) => collect($keys)
+                        ->filter(
+                            fn ($translations, $key) => strs_contain([$group, $key, $translations[$language], $translations[$this->sourceLanguage]], $filter)
+                        )
+                )
+                ->filter(fn ($keys) => $keys->isNotEmpty())
+        );
     }
 
     private static function flatternToOneKey(iterable $array, string $prefix = ''): array
