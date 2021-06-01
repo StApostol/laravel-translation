@@ -50,7 +50,7 @@ abstract class Translation
                 $languageTranslationsByTypeAndGroup = self::flatternToOneKey($languageTranslations->get($type, collect())->get($group, []));
                 $defaultLanguageTranslationsByTypeAndGroup = self::flatternToOneKey($defaultSourceTranslations->get($type, collect())->get($group, []));
 
-                array_walk($translations, function (&$value, &$key) use ($type, $language, $languageTranslationsByTypeAndGroup, $sourceLanguage, $defaultLanguageTranslationsByTypeAndGroup) {
+                array_walk($translations, function (&$value, $key) use ($type, $language, $languageTranslationsByTypeAndGroup, $sourceLanguage, $defaultLanguageTranslationsByTypeAndGroup) {
                     $value = [
                         $sourceLanguage => $value,
                         $language => Arr::get($languageTranslationsByTypeAndGroup, $key),
